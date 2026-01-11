@@ -1,6 +1,10 @@
 import streamlit as st
 import os
 from datetime import datetime
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
 
 # --- 1. KONFIGURACJA STRONY ---
 st.set_page_config(
@@ -183,13 +187,28 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 3. LOGIKA ZAPISU ---
-FOLDER_DANYCH = "zebrane_dane"
-if not os.path.exists(FOLDER_DANYCH):
-    os.makedirs(FOLDER_DANYCH)
+def save_to_drive(file_obj, filename):
+    # Pobieramy dane logowania z "Sekretów" Streamlit Cloud
+    gcp_info = st.secrets["gcp_service_account"]
+    folder_id = st.secrets["folder_id"] # ID folderu też w sekretach
+    
+    creds = service_account.Credentials.from_service_account_info(
+        gcp_info, scopes=['https://www.googleapis.com/auth/drive']
+    )
+    service = build('drive', 'v3', credentials=creds)
 
-if 'wyslano' not in st.session_state:
-    st.session_state.wyslano = False
+    file_metadata = {
+        'name': filename,
+        'parents': [folder_id]
+    }
+    
+    # Konwersja na format binarny dla Drive API
+    media = MediaIoBaseUpload(file_obj, mimetype='audio/wav', resumable=True)
+    
+    file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+    return file.get('id')
+
+
 
 # --- 4. UKŁAD STRONY (HEADER - ROGI) ---
 # Używamy kolumn, żeby rozrzucić tekst po rogach jak na stronie 'paysages'
@@ -249,24 +268,29 @@ if not st.session_state.wyslano:
             # Przycisk
             b1, b2, b3 = st.columns([1, 2, 1])
             with b2:
-                if st.button("PRZEŚLIJ DANE"):
-                    # Logika zapisu
-                    progress_text = st.empty()
-                    progress_text.text("PROCESSING...")
+               if st.button("PRZEŚLIJ DANE"):
+                
+                status = st.empty()
+                p_bar = st.progress(0)
+                
+                for i, plik in enumerate(uploaded_files):
+                    # Generowanie nazwy
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    wiek_input = dane_plikow[plik.name]
+                    wiek_safe = wiek_input.replace(" ", "").replace(".", "") if wiek_input else "null"
+                    nazwa_nowa = f"{timestamp}_{wiek_safe}_{i}.wav"
                     
-                    for i, plik in enumerate(uploaded_files):
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        wiek_input = dane_plikow[plik.name]
-                        wiek_safe = wiek_input.replace(" ", "").replace(".", "") if wiek_input else "null"
-                        
-                        nazwa_nowa = f"{timestamp}_{wiek_safe}_{i}.wav"
-                        sciezka = os.path.join(FOLDER_DANYCH, nazwa_nowa)
-                        
-                        with open(sciezka, "wb") as f:
-                            f.write(plik.getbuffer())
+                    # --- ZMIANA: ZAPIS DO CHMURY ZAMIAST LOKALNIE ---
+                    try:
+                        save_to_drive(plik, nazwa_nowa)
+                        status.text(f"WYSYŁANIE DO CHMURY: {plik.name}...")
+                    except Exception as e:
+                        st.error(f"Błąd wysyłania: {e}")
                     
-                    st.session_state.wyslano = True
-                    st.rerun()
+                    p_bar.progress((i + 1) / len(uploaded_files))
+                
+                st.session_state.wyslano = True
+                st.rerun()
 
 else:
     # EKRAN KOŃCOWY (Minimalistyczny)
