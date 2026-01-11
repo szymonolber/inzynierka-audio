@@ -208,7 +208,13 @@ def save_to_drive(file_obj, filename):
     file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
     return file.get('id')
 
+# --- 3. LOGIKA ZAPISU ---
+FOLDER_DANYCH = "zebrane_dane"
+if not os.path.exists(FOLDER_DANYCH):
+    os.makedirs(FOLDER_DANYCH)
 
+if 'wyslano' not in st.session_state:
+    st.session_state.wyslano = False
 
 # --- 4. UKŁAD STRONY (HEADER - ROGI) ---
 # Używamy kolumn, żeby rozrzucić tekst po rogach jak na stronie 'paysages'
@@ -268,29 +274,29 @@ if not st.session_state.wyslano:
             # Przycisk
             b1, b2, b3 = st.columns([1, 2, 1])
             with b2:
-               if st.button("PRZEŚLIJ DANE"):
+                if st.button("PRZEŚLIJ DANE DO ANALIZY"):
                 
-                status = st.empty()
-                p_bar = st.progress(0)
-                
-                for i, plik in enumerate(uploaded_files):
-                    # Generowanie nazwy
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    wiek_input = dane_plikow[plik.name]
-                    wiek_safe = wiek_input.replace(" ", "").replace(".", "") if wiek_input else "null"
-                    nazwa_nowa = f"{timestamp}_{wiek_safe}_{i}.wav"
+                    status = st.empty()
+                    p_bar = st.progress(0)
                     
-                    # --- ZMIANA: ZAPIS DO CHMURY ZAMIAST LOKALNIE ---
-                    try:
-                        save_to_drive(plik, nazwa_nowa)
-                        status.text(f"WYSYŁANIE DO CHMURY: {plik.name}...")
-                    except Exception as e:
-                        st.error(f"Błąd wysyłania: {e}")
+                    for i, plik in enumerate(uploaded_files):
+                        # Generowanie nazwy
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        wiek_input = dane_plikow[plik.name]
+                        wiek_safe = wiek_input.replace(" ", "").replace(".", "") if wiek_input else "null"
+                        nazwa_nowa = f"{timestamp}_{wiek_safe}_{i}.wav"
+                        
+                        # --- ZMIANA: ZAPIS DO CHMURY ZAMIAST LOKALNIE ---
+                        try:
+                            save_to_drive(plik, nazwa_nowa)
+                            status.text(f"WYSYŁANIE DO CHMURY: {plik.name}...")
+                        except Exception as e:
+                            st.error(f"Błąd wysyłania: {e}")
+                        
+                        p_bar.progress((i + 1) / len(uploaded_files))
                     
-                    p_bar.progress((i + 1) / len(uploaded_files))
-                
-                st.session_state.wyslano = True
-                st.rerun()
+                    st.session_state.wyslano = True
+                    st.rerun()
 
 else:
     # EKRAN KOŃCOWY (Minimalistyczny)
