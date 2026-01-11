@@ -1,0 +1,8 @@
+streamlit
+numpy
+pandas
+# Usuwamy librosa/matplotlib żeby przyspieszyć działanie
+# bo i tak używasz gotowych obrazków png
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
